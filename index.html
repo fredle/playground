@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Earth's Orbit — Birthdays Around the Sun</title>
+<style>
+  :root {
+    --bg: #03040a;
+    --panel: rgba(12, 16, 32, 0.72);
+    --text: #e8ecff;
+    --muted: #8b93b8;
+    --accent: #ffd86b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: radial-gradient(ellipse at center, #0a0e1f 0%, #03040a 70%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    cursor: grab;
+  }
+  canvas:active { cursor: grabbing; }
+
+  .panel {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    background: var(--panel);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px 18px;
+    max-width: 320px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+  .panel h1 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .panel p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .date {
+    margin-top: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .next {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .next strong { color: var(--text); font-weight: 600; }
+
+  .controls {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: var(--panel);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 8px 14px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+  .controls button {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .controls button:hover { background: rgba(255, 255, 255, 0.12); }
+  .controls input[type=range] {
+    width: 140px;
+    accent-color: var(--accent);
+  }
+  .controls label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .legend {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: var(--panel);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+  }
+  .legend h2 {
+    margin: 0 0 8px 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .legend ul { list-style: none; padding: 0; margin: 0; }
+  .legend li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+  }
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .legend .name { font-weight: 600; }
+  .legend .day { color: var(--muted); margin-left: auto; padding-left: 12px; }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<div class="panel">
+  <h1>Earth's Journey Around the Sun</h1>
+  <p>One full orbit = one year. Birthdays sit at the point on the orbit where Earth is on that day.</p>
+  <div class="date" id="dateLabel">—</div>
+  <div class="next" id="nextLabel"></div>
+</div>
+
+<div class="legend">
+  <h2>Birthdays</h2>
+  <ul id="legendList"></ul>
+</div>
+
+<div class="controls">
+  <button id="playBtn">Pause</button>
+  <button id="todayBtn">Today</button>
+  <label for="speed">Speed</label>
+  <input id="speed" type="range" min="0.2" max="20" step="0.1" value="3" />
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('sky');
+  const ctx = canvas.getContext('2d');
+
+  const events = [
+    { name: 'Freddie',   month: 4,  day: 24, color: '#ff6b9d' },
+    { name: 'Molly',     month: 4,  day: 29, color: '#a78bfa' },
+    { name: 'Theo',      month: 6,  day: 26, color: '#34d399' },
+    { name: 'Willow',    month: 7,  day: 11, color: '#60a5fa' },
+    { name: 'Emma',      month: 8,  day: 5,  color: '#f472b6' },
+    { name: 'Ottilie',   month: 9,  day: 3,  color: '#fbbf24' },
+    { name: 'Christmas', month: 12, day: 25, color: '#ef4444', icon: 'star' },
+  ];
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTH_LENGTHS = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+  function dayOfYear(month, day) {
+    let d = day - 1;
+    for (let i = 0; i < month - 1; i++) d += MONTH_LENGTHS[i];
+    return d;
+  }
+
+  function dateFromFraction(f) {
+    let day = Math.floor(f * 365);
+    if (day < 0) day = 0;
+    if (day > 364) day = 364;
+    let m = 0;
+    let remaining = day;
+    while (remaining >= MONTH_LENGTHS[m]) {
+      remaining -= MONTH_LENGTHS[m];
+      m++;
+    }
+    return { month: m + 1, day: remaining + 1 };
+  }
+
+  // Place day 0 (Jan 1) at the top, then go counterclockwise (Earth's orbital direction
+  // when viewed from above the north pole).
+  function angleForDay(day) {
+    return -Math.PI / 2 - (day / 365) * Math.PI * 2;
+  }
+
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    buildStars();
+  }
+  window.addEventListener('resize', resize);
+
+  let stars = [];
+  function buildStars() {
+    stars = [];
+    const n = Math.floor((W * H) / 6000);
+    for (let i = 0; i < n; i++) {
+      stars.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: Math.random() * 1.2 + 0.2,
+        tw: Math.random() * Math.PI * 2,
+        twSpeed: Math.random() * 0.02 + 0.005,
+      });
+    }
+  }
+
+  // Time / animation state
+  const today = new Date();
+  const startOfYear = new Date(today.getFullYear(), 0, 0);
+  const diff = today - startOfYear;
+  const initialDay = Math.floor(diff / (1000 * 60 * 60 * 24));
+  let yearFraction = initialDay / 365; // 0..1
+  let playing = true;
+  let speed = parseFloat(document.getElementById('speed').value);
+  let lastT = performance.now();
+
+  document.getElementById('playBtn').addEventListener('click', e => {
+    playing = !playing;
+    e.target.textContent = playing ? 'Pause' : 'Play';
+  });
+  document.getElementById('todayBtn').addEventListener('click', () => {
+    yearFraction = initialDay / 365;
+  });
+  document.getElementById('speed').addEventListener('input', e => {
+    speed = parseFloat(e.target.value);
+  });
+
+  // Build legend
+  const legendList = document.getElementById('legendList');
+  events.forEach(ev => {
+    const li = document.createElement('li');
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = ev.color;
+    sw.style.color = ev.color;
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = ev.name;
+    const day = document.createElement('span');
+    day.className = 'day';
+    day.textContent = `${ev.day} ${MONTHS[ev.month - 1]}`;
+    li.appendChild(sw);
+    li.appendChild(name);
+    li.appendChild(day);
+    legendList.appendChild(li);
+  });
+
+  function drawStars(t) {
+    for (const s of stars) {
+      s.tw += s.twSpeed;
+      const a = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(s.tw));
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawSun(cx, cy, r, t) {
+    // Outer glow
+    const grad = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 6);
+    grad.addColorStop(0, 'rgba(255, 220, 120, 0.6)');
+    grad.addColorStop(0.3, 'rgba(255, 180, 60, 0.18)');
+    grad.addColorStop(1, 'rgba(255, 160, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body with subtle pulsing
+    const pulse = 1 + 0.03 * Math.sin(t * 0.002);
+    const body = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r * pulse);
+    body.addColorStop(0, '#fff7d6');
+    body.addColorStop(0.5, '#ffd86b');
+    body.addColorStop(1, '#ff9b1a');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawOrbit(cx, cy, r) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawMonthTicks(cx, cy, r) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.font = '10px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let cumulative = 0;
+    for (let i = 0; i < 12; i++) {
+      const a = angleForDay(cumulative);
+      const x1 = cx + Math.cos(a) * (r - 4);
+      const y1 = cy + Math.sin(a) * (r - 4);
+      const x2 = cx + Math.cos(a) * (r + 4);
+      const y2 = cy + Math.sin(a) * (r + 4);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      const lx = cx + Math.cos(a) * (r + 18);
+      const ly = cy + Math.sin(a) * (r + 18);
+      ctx.fillText(MONTHS[i], lx, ly);
+
+      cumulative += MONTH_LENGTHS[i];
+    }
+  }
+
+  function drawStar(cx, cy, spikes, outer, inner) {
+    let rot = -Math.PI / 2;
+    const step = Math.PI / spikes;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(rot) * outer, cy + Math.sin(rot) * outer);
+    for (let i = 0; i < spikes; i++) {
+      rot += step;
+      ctx.lineTo(cx + Math.cos(rot) * inner, cy + Math.sin(rot) * inner);
+      rot += step;
+      ctx.lineTo(cx + Math.cos(rot) * outer, cy + Math.sin(rot) * outer);
+    }
+    ctx.closePath();
+  }
+
+  function drawMarkers(cx, cy, r, currentFraction) {
+    const currentDay = currentFraction * 365;
+    for (const ev of events) {
+      const day = dayOfYear(ev.month, ev.day);
+      const a = angleForDay(day);
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+
+      const dayDelta = Math.min(
+        Math.abs(currentDay - day),
+        365 - Math.abs(currentDay - day)
+      );
+      const proximity = Math.max(0, 1 - dayDelta / 12); // glow when within 12 days
+
+      // Glow
+      const glowR = 14 + proximity * 16;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      glow.addColorStop(0, ev.color + 'cc');
+      glow.addColorStop(1, ev.color + '00');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Marker
+      if (ev.icon === 'star') {
+        ctx.fillStyle = ev.color;
+        drawStar(x, y, 5, 8, 3.5);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = ev.color;
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Label, pushed outward along the radius
+      const labelDist = r + 38;
+      const lx = cx + Math.cos(a) * labelDist;
+      const ly = cy + Math.sin(a) * labelDist;
+      ctx.font = '600 12px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillText(ev.name, lx + 1, ly + 1);
+      ctx.fillStyle = ev.color;
+      ctx.fillText(ev.name, lx, ly);
+      ctx.font = '11px -apple-system, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText(`${ev.day} ${MONTHS[ev.month - 1]}`, lx, ly + 14);
+    }
+  }
+
+  function drawEarth(cx, cy, r, fraction, t) {
+    const day = fraction * 365;
+    const a = angleForDay(day);
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+
+    // Trailing line back along orbit
+    ctx.strokeStyle = 'rgba(120, 180, 255, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const trailDays = 30;
+    for (let i = 0; i <= trailDays; i++) {
+      const tDay = day - i;
+      const tA = angleForDay(tDay);
+      const tx = cx + Math.cos(tA) * r;
+      const ty = cy + Math.sin(tA) * r;
+      ctx.globalAlpha = (1 - i / trailDays) * 0.6;
+      if (i === 0) ctx.moveTo(tx, ty);
+      else ctx.lineTo(tx, ty);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Earth glow
+    const earthR = 11;
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, earthR * 3);
+    halo.addColorStop(0, 'rgba(120, 180, 255, 0.6)');
+    halo.addColorStop(1, 'rgba(120, 180, 255, 0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(x, y, earthR * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Earth body
+    const grad = ctx.createRadialGradient(x - earthR * 0.4, y - earthR * 0.4, earthR * 0.2, x, y, earthR);
+    grad.addColorStop(0, '#9ed4ff');
+    grad.addColorStop(0.5, '#3b82f6');
+    grad.addColorStop(1, '#0c2a6b');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, earthR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Suggestion of continents — random-looking blobs that rotate with time
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, earthR, 0, Math.PI * 2);
+    ctx.clip();
+    const rot = t * 0.0008;
+    ctx.fillStyle = 'rgba(60, 140, 80, 0.85)';
+    for (let i = 0; i < 5; i++) {
+      const ang = rot + i * 1.3;
+      const px = x + Math.cos(ang) * earthR * 0.45;
+      const py = y + Math.sin(ang * 1.2) * earthR * 0.45;
+      ctx.beginPath();
+      ctx.arc(px, py, earthR * (0.25 + 0.1 * Math.sin(i)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Shadow on far side from sun (sun at cx,cy)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, earthR, 0, Math.PI * 2);
+    ctx.clip();
+    const sunDir = Math.atan2(y - cy, x - cx);
+    const sx = x + Math.cos(sunDir) * earthR * 0.3;
+    const sy = y + Math.sin(sunDir) * earthR * 0.3;
+    const shade = ctx.createRadialGradient(sx, sy, earthR * 0.2, sx, sy, earthR * 1.6);
+    shade.addColorStop(0, 'rgba(0,0,0,0)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.7)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(x - earthR, y - earthR, earthR * 2, earthR * 2);
+    ctx.restore();
+  }
+
+  function nextBirthday(currentDay) {
+    let best = null;
+    let bestDelta = Infinity;
+    for (const ev of events) {
+      const d = dayOfYear(ev.month, ev.day);
+      let delta = d - currentDay;
+      if (delta < 0) delta += 365;
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        best = ev;
+      }
+    }
+    return { event: best, days: Math.round(bestDelta) };
+  }
+
+  function updateLabels() {
+    const dayIdx = Math.floor(yearFraction * 365);
+    const date = dateFromFraction(yearFraction);
+    document.getElementById('dateLabel').textContent =
+      `${date.day} ${MONTHS[date.month - 1]}`;
+
+    const nb = nextBirthday(dayIdx);
+    const label = document.getElementById('nextLabel');
+    if (nb.days === 0) {
+      label.innerHTML = `Today: <strong>${nb.event.name}'s ${nb.event.name === 'Christmas' ? 'Day' : 'Birthday'}</strong>`;
+    } else {
+      const isXmas = nb.event.name === 'Christmas';
+      label.innerHTML = `Next: <strong>${nb.event.name}${isXmas ? '' : "'s birthday"}</strong> in ${nb.days} day${nb.days === 1 ? '' : 's'}`;
+    }
+  }
+
+  function frame(t) {
+    const dt = Math.min(t - lastT, 100);
+    lastT = t;
+
+    if (playing) {
+      // speed: years per real-second at slider midpoint
+      yearFraction += (dt / 1000) * (speed / 20);
+      if (yearFraction >= 1) yearFraction -= 1;
+    }
+
+    ctx.clearRect(0, 0, W, H);
+    drawStars(t);
+
+    const cx = W / 2;
+    const cy = H / 2;
+    const orbitR = Math.min(W, H) * 0.32;
+    const sunR = Math.min(W, H) * 0.04;
+
+    drawSun(cx, cy, sunR, t);
+    drawOrbit(cx, cy, orbitR);
+    drawMonthTicks(cx, cy, orbitR);
+    drawMarkers(cx, cy, orbitR, yearFraction);
+    drawEarth(cx, cy, orbitR, yearFraction, t);
+
+    updateLabels();
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  requestAnimationFrame(t => { lastT = t; frame(t); });
+})();
+</script>
+</body>
+</html>
