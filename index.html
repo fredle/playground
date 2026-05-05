@@ -68,6 +68,21 @@
     color: var(--muted);
   }
   .next strong { color: var(--text); font-weight: 600; }
+  .season {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .season .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px currentColor;
+  }
+  .season strong { color: var(--text); font-weight: 600; }
 
   .controls {
     position: fixed;
@@ -154,6 +169,7 @@
   <h1>Earth's Journey Around the Sun</h1>
   <p>One full orbit = one year. Birthdays sit at the point on the orbit where Earth is on that day.</p>
   <div class="date" id="dateLabel">—</div>
+  <div class="season" id="seasonLabel"></div>
   <div class="next" id="nextLabel"></div>
 </div>
 
@@ -186,6 +202,14 @@
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const MONTH_LENGTHS = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+  // Northern-hemisphere seasons, by start date (astronomical: equinoxes & solstices)
+  const seasons = [
+    { name: 'Spring', startMonth: 3,  startDay: 20, color: '#7cd97c' },
+    { name: 'Summer', startMonth: 6,  startDay: 21, color: '#ffb347' },
+    { name: 'Autumn', startMonth: 9,  startDay: 22, color: '#d97a3c' },
+    { name: 'Winter', startMonth: 12, startDay: 21, color: '#9bd1ff' },
+  ];
 
   function dayOfYear(month, day) {
     let d = day - 1;
@@ -326,6 +350,80 @@
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  // Returns the start day-of-year for each season, plus end day (exclusive) and length.
+  function seasonRanges() {
+    const starts = seasons.map(s => dayOfYear(s.startMonth, s.startDay));
+    return seasons.map((s, i) => {
+      const start = starts[i];
+      const end = starts[(i + 1) % seasons.length]; // may wrap
+      let length = end - start;
+      if (length <= 0) length += 365;
+      return { ...s, start, end, length };
+    });
+  }
+
+  function currentSeason(currentDay) {
+    const ranges = seasonRanges();
+    for (const r of ranges) {
+      if (r.start <= r.end) {
+        if (currentDay >= r.start && currentDay < r.end) return r;
+      } else {
+        if (currentDay >= r.start || currentDay < r.end) return r;
+      }
+    }
+    return ranges[0];
+  }
+
+  function drawSeasons(cx, cy, r) {
+    const ranges = seasonRanges();
+    const ringWidth = Math.max(8, r * 0.05);
+
+    // Soft coloured arc segments behind the orbit line
+    for (const s of ranges) {
+      const a1 = angleForDay(s.start);
+      const a2 = angleForDay(s.start + s.length);
+      // Earth orbits counterclockwise (angle decreases), so arc must go from a1 to a2 in
+      // that direction — which canvas calls anticlockwise=true.
+      ctx.strokeStyle = s.color + '38'; // ~22% alpha
+      ctx.lineWidth = ringWidth;
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, a1, a2, true);
+      ctx.stroke();
+    }
+
+    // Solstice / equinox tick marks at season boundaries
+    for (const s of ranges) {
+      const a = angleForDay(s.start);
+      const x1 = cx + Math.cos(a) * (r - ringWidth / 2 - 2);
+      const y1 = cy + Math.sin(a) * (r - ringWidth / 2 - 2);
+      const x2 = cx + Math.cos(a) * (r + ringWidth / 2 + 2);
+      const y2 = cy + Math.sin(a) * (r + ringWidth / 2 + 2);
+      ctx.strokeStyle = s.color + 'cc';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    // Season labels, placed at the midpoint of each arc, just inside the orbit
+    ctx.font = '600 13px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const s of ranges) {
+      const midDay = s.start + s.length / 2;
+      const a = angleForDay(midDay);
+      const labelR = r - ringWidth / 2 - 22;
+      const lx = cx + Math.cos(a) * labelR;
+      const ly = cy + Math.sin(a) * labelR;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillText(s.name, lx + 1, ly + 1);
+      ctx.fillStyle = s.color + 'cc';
+      ctx.fillText(s.name, lx, ly);
+    }
   }
 
   function drawMonthTicks(cx, cy, r) {
@@ -525,6 +623,11 @@
     document.getElementById('dateLabel').textContent =
       `${date.day} ${MONTHS[date.month - 1]}`;
 
+    const season = currentSeason(dayIdx);
+    document.getElementById('seasonLabel').innerHTML =
+      `<span class="dot" style="background:${season.color};color:${season.color}"></span>` +
+      `<strong>${season.name}</strong> (Northern Hemisphere)`;
+
     const nb = nextBirthday(dayIdx);
     const label = document.getElementById('nextLabel');
     if (nb.days === 0) {
@@ -554,6 +657,7 @@
     const sunR = Math.min(W, H) * 0.04;
 
     drawSun(cx, cy, sunR, t);
+    drawSeasons(cx, cy, orbitR);
     drawOrbit(cx, cy, orbitR);
     drawMonthTicks(cx, cy, orbitR);
     drawMarkers(cx, cy, orbitR, yearFraction);
