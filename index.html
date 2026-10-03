@@ -780,13 +780,14 @@
 
   let bursts = [];
   let lastBurstDay = -1;
-  function maybeTriggerBurst(currentDay) {
+  function maybeTriggerBurst(currentDay, t) {
     const day = Math.floor(currentDay);
     if (day === lastBurstDay) return;
+    if (day < 0 || day > 364) return;
     lastBurstDay = day;
     for (const ev of events) {
       if (dayOfYear(ev.month, ev.day) === day) {
-        bursts.push({ day, color: ev.color, name: ev.name, start: performance.now(), duration: 2200 });
+        bursts.push({ day: day, color: ev.color, name: ev.name, start: t, duration: 2200 });
       }
     }
   }
@@ -794,24 +795,26 @@
   function drawBursts(cx, cy, r, t) {
     bursts = bursts.filter(b => t - b.start < b.duration);
     for (const b of bursts) {
-      const u = (t - b.start) / b.duration;
+      const u = Math.max(0, Math.min(1, (t - b.start) / b.duration));
       const a = angleForDay(b.day);
       const x = cx + Math.cos(a) * r;
       const y = cy + Math.sin(a) * r;
       const maxR = 70 + 40 * Math.sin(u * Math.PI);
       const alpha = 1 - u;
+      const ringR = Math.max(0, maxR * u);
       ctx.strokeStyle = b.color;
       ctx.globalAlpha = alpha * 0.9;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.arc(x, y, maxR * u, 0, Math.PI * 2);
+      ctx.arc(x, y, ringR, 0, Math.PI * 2);
       ctx.stroke();
       if (u > 0.25) {
         const u2 = (u - 0.25) / 0.75;
+        const ringR2 = Math.max(0, maxR * 0.6 * u2);
         ctx.globalAlpha = (1 - u2) * 0.5;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(x, y, maxR * 0.6 * u2, 0, Math.PI * 2);
+        ctx.arc(x, y, ringR2, 0, Math.PI * 2);
         ctx.stroke();
       }
       for (let i = 0; i < 14; i++) {
@@ -843,7 +846,8 @@
     lastT = t;
     if (playing) {
       yearFraction += (dt / 1000) * (speed / 20);
-      if (yearFraction >= 1) yearFraction -= 1;
+      yearFraction = yearFraction % 1;
+      if (yearFraction < 0) yearFraction += 1;
     }
     ctx.clearRect(0, 0, W, H);
     drawStars(t);
@@ -857,7 +861,7 @@
     drawMonthTicks(cx, cy, orbitR);
     drawMarkers(cx, cy, orbitR, yearFraction);
     drawEarth(cx, cy, orbitR, yearFraction, t);
-    maybeTriggerBurst(yearFraction * 365);
+    maybeTriggerBurst(yearFraction * 365, t);
     drawBursts(cx, cy, orbitR, t);
     updateLabels();
     requestAnimationFrame(frame);
