@@ -160,6 +160,7 @@
   }
   .legend .name { font-weight: 600; }
   .legend .day { color: var(--muted); margin-left: auto; padding-left: 12px; }
+  .legend .age { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -191,19 +192,18 @@
   const ctx = canvas.getContext('2d');
 
   const events = [
-    { name: 'Freddie',   month: 4,  day: 24, color: '#ff6b9d' },
-    { name: 'Molly',     month: 4,  day: 29, color: '#a78bfa' },
-    { name: 'Theo',      month: 6,  day: 26, color: '#34d399' },
-    { name: 'Willow',    month: 7,  day: 11, color: '#60a5fa' },
-    { name: 'Emma',      month: 8,  day: 5,  color: '#f472b6' },
-    { name: 'Ottilie',   month: 9,  day: 3,  color: '#fbbf24' },
+    { name: 'Freddie',   month: 4,  day: 24, color: '#ff6b9d', year: 1981 },
+    { name: 'Molly',     month: 4,  day: 29, color: '#a78bfa', year: 2017 },
+    { name: 'Theo',      month: 6,  day: 26, color: '#34d399', year: 2012 },
+    { name: 'Willow',    month: 7,  day: 11, color: '#60a5fa', year: 2022 },
+    { name: 'Emma',      month: 8,  day: 5,  color: '#f472b6', year: 1983 },
+    { name: 'Ottilie',   month: 9,  day: 3,  color: '#fbbf24', year: 2014 },
     { name: 'Christmas', month: 12, day: 25, color: '#ef4444', icon: 'star' },
   ];
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const MONTH_LENGTHS = [31,28,31,30,31,30,31,31,30,31,30,31];
 
-  // Northern-hemisphere seasons, by start date (astronomical: equinoxes & solstices)
   const seasons = [
     { name: 'Spring', startMonth: 3,  startDay: 20, color: '#7cd97c' },
     { name: 'Summer', startMonth: 6,  startDay: 21, color: '#ffb347' },
@@ -230,8 +230,6 @@
     return { month: m + 1, day: remaining + 1 };
   }
 
-  // Place day 0 (Jan 1) at the top, then go counterclockwise (Earth's orbital direction
-  // when viewed from above the north pole).
   function angleForDay(day) {
     return -Math.PI / 2 - (day / 365) * Math.PI * 2;
   }
@@ -265,12 +263,11 @@
     }
   }
 
-  // Time / animation state
   const today = new Date();
   const startOfYear = new Date(today.getFullYear(), 0, 0);
   const diff = today - startOfYear;
   const initialDay = Math.floor(diff / (1000 * 60 * 60 * 24));
-  let yearFraction = initialDay / 365; // 0..1
+  let yearFraction = initialDay / 365;
   let playing = true;
   let speed = parseFloat(document.getElementById('speed').value);
   let lastT = performance.now();
@@ -286,7 +283,6 @@
     speed = parseFloat(e.target.value);
   });
 
-  // Build legend
   const legendList = document.getElementById('legendList');
   events.forEach(ev => {
     const li = document.createElement('li');
@@ -303,6 +299,12 @@
     li.appendChild(sw);
     li.appendChild(name);
     li.appendChild(day);
+    if (ev.year) {
+      const age = document.createElement('span');
+      age.className = 'age';
+      age.textContent = today.getFullYear() - ev.year;
+      li.appendChild(age);
+    }
     legendList.appendChild(li);
   });
 
@@ -320,7 +322,6 @@
   }
 
   function drawSun(cx, cy, r, t) {
-    // Outer glow
     const grad = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 6);
     grad.addColorStop(0, 'rgba(255, 220, 120, 0.6)');
     grad.addColorStop(0.3, 'rgba(255, 180, 60, 0.18)');
@@ -329,8 +330,6 @@
     ctx.beginPath();
     ctx.arc(cx, cy, r * 6, 0, Math.PI * 2);
     ctx.fill();
-
-    // Body with subtle pulsing
     const pulse = 1 + 0.03 * Math.sin(t * 0.002);
     const body = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r * pulse);
     body.addColorStop(0, '#fff7d6');
@@ -352,12 +351,11 @@
     ctx.setLineDash([]);
   }
 
-  // Returns the start day-of-year for each season, plus end day (exclusive) and length.
   function seasonRanges() {
     const starts = seasons.map(s => dayOfYear(s.startMonth, s.startDay));
     return seasons.map((s, i) => {
       const start = starts[i];
-      const end = starts[(i + 1) % seasons.length]; // may wrap
+      const end = starts[(i + 1) % seasons.length];
       let length = end - start;
       if (length <= 0) length += 365;
       return { ...s, start, end, length };
@@ -376,7 +374,6 @@
     return ranges[0];
   }
 
-  // Deterministic PRNG so decorative icon positions are stable between frames.
   function seedRand(seed) {
     let s = seed >>> 0;
     return function () {
@@ -395,12 +392,11 @@
     ranges.forEach((s, idx) => {
       const rand = seedRand(idx * 9176 + 31);
       const items = [];
-      const count = 14;
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < 14; i++) {
         items.push({
           dayOffset: rand() * s.length,
-          radialT: 0.18 + rand() * 0.78, // fraction across the season band
-          tangential: (rand() - 0.5) * 0.4, // small angular offset for organic feel
+          radialT: 0.18 + rand() * 0.78,
+          tangential: (rand() - 0.5) * 0.4,
           scale: 0.6 + rand() * 0.9,
           rotation: rand() * Math.PI * 2,
           phase: rand() * Math.PI * 2,
@@ -512,9 +508,6 @@
     const ringWidth = Math.max(10, r * 0.06);
     const innerR = r * 0.55;
     const outerR = r - ringWidth / 2 - 2;
-
-    // Filled wedges (annular sectors) with a radial gradient — colour fades
-    // inward so the sun isn't overwhelmed.
     for (const s of ranges) {
       const a1 = angleForDay(s.start);
       const a2 = angleForDay(s.start + s.length);
@@ -529,8 +522,6 @@
       ctx.fillStyle = grad;
       ctx.fill();
     }
-
-    // Coloured highlight along the orbit ring
     for (const s of ranges) {
       const a1 = angleForDay(s.start);
       const a2 = angleForDay(s.start + s.length);
@@ -541,12 +532,9 @@
       ctx.arc(cx, cy, r, a1, a2, true);
       ctx.stroke();
     }
-
-    // Decorative seasonal icons scattered through each wedge
     for (const group of seasonDeco) {
       const s = group.season;
       for (const it of group.items) {
-        // Drift slightly with time for an animated, atmospheric feel.
         const driftDay = it.dayOffset + Math.sin(t * 0.0002 + it.phase) * 1.5;
         const a = angleForDay(s.start + driftDay) + it.tangential * 0.05;
         const radius = innerR + (outerR - innerR) * it.radialT;
@@ -556,22 +544,15 @@
         const baseSize = Math.max(4, r * 0.018) * it.scale;
         const rot = it.rotation + sway;
         const alpha = 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(t * 0.0006 + it.phase));
-
-        if (s.name === 'Spring') {
-          drawFlower(x, y, baseSize, rot, alpha);
-        } else if (s.name === 'Summer') {
-          drawSunIcon(x, y, baseSize * 1.1, rot * 0.3, alpha);
-        } else if (s.name === 'Autumn') {
+        if (s.name === 'Spring') drawFlower(x, y, baseSize, rot, alpha);
+        else if (s.name === 'Summer') drawSunIcon(x, y, baseSize * 1.1, rot * 0.3, alpha);
+        else if (s.name === 'Autumn') {
           const color = AUTUMN_LEAF_COLORS[Math.floor(it.phase * 4) % AUTUMN_LEAF_COLORS.length];
           drawLeaf(x, y, baseSize * 1.1, rot, alpha, color);
-        } else if (s.name === 'Winter') {
-          drawSnowflake(x, y, baseSize * 1.05, rot * 0.4, alpha * 0.9);
-        }
+        } else if (s.name === 'Winter') drawSnowflake(x, y, baseSize * 1.05, rot * 0.4, alpha * 0.9);
       }
     }
     ctx.globalAlpha = 1;
-
-    // Solstice / equinox markers at season boundaries — small radial line + dot
     for (const s of ranges) {
       const a = angleForDay(s.start);
       const x1 = cx + Math.cos(a) * (r - ringWidth / 2 - 4);
@@ -586,7 +567,6 @@
       ctx.lineTo(x2, y2);
       ctx.stroke();
       ctx.globalAlpha = 1;
-
       const dx = cx + Math.cos(a) * (r + ringWidth / 2 + 9);
       const dy = cy + Math.sin(a) * (r + ringWidth / 2 + 9);
       ctx.fillStyle = s.color;
@@ -594,8 +574,6 @@
       ctx.arc(dx, dy, 2.2, 0, Math.PI * 2);
       ctx.fill();
     }
-
-    // Big decorative season labels with a coloured glow
     ctx.font = '600 18px Georgia, "Times New Roman", serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -631,11 +609,9 @@
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
-
       const lx = cx + Math.cos(a) * (r + 18);
       const ly = cy + Math.sin(a) * (r + 18);
       ctx.fillText(MONTHS[i], lx, ly);
-
       cumulative += MONTH_LENGTHS[i];
     }
   }
@@ -661,14 +637,8 @@
       const a = angleForDay(day);
       const x = cx + Math.cos(a) * r;
       const y = cy + Math.sin(a) * r;
-
-      const dayDelta = Math.min(
-        Math.abs(currentDay - day),
-        365 - Math.abs(currentDay - day)
-      );
-      const proximity = Math.max(0, 1 - dayDelta / 12); // glow when within 12 days
-
-      // Glow
+      const dayDelta = Math.min(Math.abs(currentDay - day), 365 - Math.abs(currentDay - day));
+      const proximity = Math.max(0, 1 - dayDelta / 12);
       const glowR = 14 + proximity * 16;
       const glow = ctx.createRadialGradient(x, y, 0, x, y, glowR);
       glow.addColorStop(0, ev.color + 'cc');
@@ -677,8 +647,6 @@
       ctx.beginPath();
       ctx.arc(x, y, glowR, 0, Math.PI * 2);
       ctx.fill();
-
-      // Marker
       if (ev.icon === 'star') {
         ctx.fillStyle = ev.color;
         drawStar(x, y, 5, 8, 3.5);
@@ -695,8 +663,6 @@
         ctx.lineWidth = 1;
         ctx.stroke();
       }
-
-      // Label, pushed outward along the radius
       const labelDist = r + 38;
       const lx = cx + Math.cos(a) * labelDist;
       const ly = cy + Math.sin(a) * labelDist;
@@ -718,8 +684,6 @@
     const a = angleForDay(day);
     const x = cx + Math.cos(a) * r;
     const y = cy + Math.sin(a) * r;
-
-    // Trailing line back along orbit
     ctx.strokeStyle = 'rgba(120, 180, 255, 0.35)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -735,8 +699,6 @@
     }
     ctx.stroke();
     ctx.globalAlpha = 1;
-
-    // Earth glow
     const earthR = 11;
     const halo = ctx.createRadialGradient(x, y, 0, x, y, earthR * 3);
     halo.addColorStop(0, 'rgba(120, 180, 255, 0.6)');
@@ -745,8 +707,6 @@
     ctx.beginPath();
     ctx.arc(x, y, earthR * 3, 0, Math.PI * 2);
     ctx.fill();
-
-    // Earth body
     const grad = ctx.createRadialGradient(x - earthR * 0.4, y - earthR * 0.4, earthR * 0.2, x, y, earthR);
     grad.addColorStop(0, '#9ed4ff');
     grad.addColorStop(0.5, '#3b82f6');
@@ -755,8 +715,6 @@
     ctx.beginPath();
     ctx.arc(x, y, earthR, 0, Math.PI * 2);
     ctx.fill();
-
-    // Suggestion of continents — random-looking blobs that rotate with time
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, earthR, 0, Math.PI * 2);
@@ -772,8 +730,6 @@
       ctx.fill();
     }
     ctx.restore();
-
-    // Shadow on far side from sun (sun at cx,cy)
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, earthR, 0, Math.PI * 2);
@@ -807,14 +763,11 @@
   function updateLabels() {
     const dayIdx = Math.floor(yearFraction * 365);
     const date = dateFromFraction(yearFraction);
-    document.getElementById('dateLabel').textContent =
-      `${date.day} ${MONTHS[date.month - 1]}`;
-
+    document.getElementById('dateLabel').textContent = `${date.day} ${MONTHS[date.month - 1]}`;
     const season = currentSeason(dayIdx);
     document.getElementById('seasonLabel').innerHTML =
       `<span class="dot" style="background:${season.color};color:${season.color}"></span>` +
       `<strong>${season.name}</strong> (Northern Hemisphere)`;
-
     const nb = nextBirthday(dayIdx);
     const label = document.getElementById('nextLabel');
     if (nb.days === 0) {
@@ -825,31 +778,87 @@
     }
   }
 
+  let bursts = [];
+  let lastBurstDay = -1;
+  function maybeTriggerBurst(currentDay) {
+    const day = Math.floor(currentDay);
+    if (day === lastBurstDay) return;
+    lastBurstDay = day;
+    for (const ev of events) {
+      if (dayOfYear(ev.month, ev.day) === day) {
+        bursts.push({ day, color: ev.color, name: ev.name, start: performance.now(), duration: 2200 });
+      }
+    }
+  }
+
+  function drawBursts(cx, cy, r, t) {
+    bursts = bursts.filter(b => t - b.start < b.duration);
+    for (const b of bursts) {
+      const u = (t - b.start) / b.duration;
+      const a = angleForDay(b.day);
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      const maxR = 70 + 40 * Math.sin(u * Math.PI);
+      const alpha = 1 - u;
+      ctx.strokeStyle = b.color;
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, maxR * u, 0, Math.PI * 2);
+      ctx.stroke();
+      if (u > 0.25) {
+        const u2 = (u - 0.25) / 0.75;
+        ctx.globalAlpha = (1 - u2) * 0.5;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y, maxR * 0.6 * u2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 14; i++) {
+        const ang = (i / 14) * Math.PI * 2 + u * 2;
+        const dist = maxR * u * (0.6 + 0.4 * Math.sin(i * 3.1));
+        const sx = x + Math.cos(ang) * dist;
+        const sy = y + Math.sin(ang) * dist;
+        ctx.globalAlpha = alpha * (0.5 + 0.5 * Math.sin(i));
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = Math.min(1, u * 3) * (1 - u);
+      ctx.font = '700 15px Georgia, "Times New Roman", serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(b.name, x, y - 2);
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function frame(t) {
     const dt = Math.min(t - lastT, 100);
     lastT = t;
-
     if (playing) {
-      // speed: years per real-second at slider midpoint
       yearFraction += (dt / 1000) * (speed / 20);
       if (yearFraction >= 1) yearFraction -= 1;
     }
-
     ctx.clearRect(0, 0, W, H);
     drawStars(t);
-
     const cx = W / 2;
     const cy = H / 2;
     const orbitR = Math.min(W, H) * 0.32;
     const sunR = Math.min(W, H) * 0.04;
-
     drawSun(cx, cy, sunR, t);
     drawSeasons(cx, cy, orbitR, t);
     drawOrbit(cx, cy, orbitR);
     drawMonthTicks(cx, cy, orbitR);
     drawMarkers(cx, cy, orbitR, yearFraction);
     drawEarth(cx, cy, orbitR, yearFraction, t);
-
+    maybeTriggerBurst(yearFraction * 365);
+    drawBursts(cx, cy, orbitR, t);
     updateLabels();
     requestAnimationFrame(frame);
   }
