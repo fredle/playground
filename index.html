@@ -270,7 +270,7 @@
   let yearFraction = initialDay / 365;
   let playing = true;
   let speed = parseFloat(document.getElementById('speed').value);
-  let lastT = performance.now();
+  let lastT = 0;
 
   document.getElementById('playBtn').addEventListener('click', e => {
     playing = !playing;
@@ -781,90 +781,108 @@
   let bursts = [];
   let lastBurstDay = -1;
   function maybeTriggerBurst(currentDay, t) {
-    const day = Math.floor(currentDay);
+    let day = Math.floor(currentDay);
+    if (!Number.isFinite(day)) return;
+    day = ((day % 365) + 365) % 365;
     if (day === lastBurstDay) return;
-    if (day < 0 || day > 364) return;
     lastBurstDay = day;
     for (const ev of events) {
       if (dayOfYear(ev.month, ev.day) === day) {
-        bursts.push({ day: day, color: ev.color, name: ev.name, start: t, duration: 2200 });
+        bursts.push({ day: day, color: ev.color, name: ev.name, start: t, duration: 1800 });
       }
     }
+    if (bursts.length > 8) bursts = bursts.slice(-8);
   }
 
   function drawBursts(cx, cy, r, t) {
-    bursts = bursts.filter(b => t - b.start < b.duration);
+    if (!Number.isFinite(t)) { bursts = []; return; }
+    bursts = bursts.filter(b => (t - b.start) < b.duration);
     for (const b of bursts) {
-      const u = Math.max(0, Math.min(1, (t - b.start) / b.duration));
+      let u = (t - b.start) / b.duration;
+      if (!Number.isFinite(u)) continue;
+      u = u < 0 ? 0 : (u > 1 ? 1 : u);
       const a = angleForDay(b.day);
       const x = cx + Math.cos(a) * r;
       const y = cy + Math.sin(a) * r;
-      const maxR = 70 + 40 * Math.sin(u * Math.PI);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const maxR = 55 + 30 * Math.sin(u * Math.PI);
       const alpha = 1 - u;
-      const ringR = Math.max(0, maxR * u);
-      ctx.strokeStyle = b.color;
-      ctx.globalAlpha = alpha * 0.9;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(x, y, ringR, 0, Math.PI * 2);
-      ctx.stroke();
-      if (u > 0.25) {
-        const u2 = (u - 0.25) / 0.75;
-        const ringR2 = Math.max(0, maxR * 0.6 * u2);
-        ctx.globalAlpha = (1 - u2) * 0.5;
-        ctx.lineWidth = 1.5;
+      const ringR = maxR * u;
+      if (ringR > 0.5) {
+        ctx.strokeStyle = b.color;
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(x, y, ringR2, 0, Math.PI * 2);
+        ctx.arc(x, y, ringR, 0, Math.PI * 2);
         ctx.stroke();
       }
-      for (let i = 0; i < 14; i++) {
-        const ang = (i / 14) * Math.PI * 2 + u * 2;
-        const dist = maxR * u * (0.6 + 0.4 * Math.sin(i * 3.1));
+      if (u > 0.25) {
+        const u2 = (u - 0.25) / 0.75;
+        const ringR2 = maxR * 0.55 * u2;
+        if (ringR2 > 0.5) {
+          ctx.globalAlpha = (1 - u2) * 0.45;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(x, y, ringR2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      for (let i = 0; i < 10; i++) {
+        const ang = (i / 10) * Math.PI * 2 + u * 1.7;
+        const dist = maxR * u * (0.55 + 0.45 * Math.sin(i * 2.7));
         const sx = x + Math.cos(ang) * dist;
         const sy = y + Math.sin(ang) * dist;
-        ctx.globalAlpha = alpha * (0.5 + 0.5 * Math.sin(i));
+        ctx.globalAlpha = alpha * 0.7;
         ctx.fillStyle = b.color;
         ctx.beginPath();
-        ctx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+        ctx.arc(sx, sy, 2, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = Math.min(1, u * 3) * (1 - u);
-      ctx.font = '700 15px Georgia, "Times New Roman", serif';
+      ctx.font = '700 14px -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = b.color;
-      ctx.shadowBlur = 12;
       ctx.fillStyle = '#ffffff';
       ctx.fillText(b.name, x, y - 2);
-      ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
   }
 
   function frame(t) {
-    const dt = Math.min(t - lastT, 100);
-    lastT = t;
-    if (playing) {
-      yearFraction += (dt / 1000) * (speed / 20);
-      yearFraction = yearFraction % 1;
-      if (yearFraction < 0) yearFraction += 1;
-    }
-    ctx.clearRect(0, 0, W, H);
-    drawStars(t);
-    const cx = W / 2;
-    const cy = H / 2;
-    const orbitR = Math.min(W, H) * 0.32;
-    const sunR = Math.min(W, H) * 0.04;
-    drawSun(cx, cy, sunR, t);
-    drawSeasons(cx, cy, orbitR, t);
-    drawOrbit(cx, cy, orbitR);
-    drawMonthTicks(cx, cy, orbitR);
-    drawMarkers(cx, cy, orbitR, yearFraction);
-    drawEarth(cx, cy, orbitR, yearFraction, t);
-    maybeTriggerBurst(yearFraction * 365, t);
-    drawBursts(cx, cy, orbitR, t);
-    updateLabels();
     requestAnimationFrame(frame);
+    try {
+      const dt = Math.min(Math.max(0, t - lastT), 100);
+      lastT = t;
+      if (playing) {
+        yearFraction += (dt / 1000) * (speed / 20);
+        yearFraction = yearFraction % 1;
+        if (yearFraction < 0) yearFraction += 1;
+        if (!Number.isFinite(yearFraction)) yearFraction = 0;
+      }
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.clearRect(0, 0, W, H);
+      drawStars(t);
+      const cx = W / 2;
+      const cy = H / 2;
+      const orbitR = Math.min(W, H) * 0.32;
+      const sunR = Math.min(W, H) * 0.04;
+      drawSun(cx, cy, sunR, t);
+      drawSeasons(cx, cy, orbitR, t);
+      drawOrbit(cx, cy, orbitR);
+      drawMonthTicks(cx, cy, orbitR);
+      drawMarkers(cx, cy, orbitR, yearFraction);
+      drawEarth(cx, cy, orbitR, yearFraction, t);
+      maybeTriggerBurst(yearFraction * 365, t);
+      drawBursts(cx, cy, orbitR, t);
+      updateLabels();
+    } catch (err) {
+      if (!frame._logged) {
+        frame._logged = true;
+        console.error('orbit frame error', err);
+      }
+    }
   }
 
   resize();
