@@ -160,6 +160,7 @@
   }
   .legend .name { font-weight: 600; }
   .legend .day { color: var(--muted); margin-left: auto; padding-left: 12px; }
+  .legend .age { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -191,12 +192,12 @@
   const ctx = canvas.getContext('2d');
 
   const events = [
-    { name: 'Freddie',   month: 4,  day: 24, color: '#ff6b9d' },
-    { name: 'Molly',     month: 4,  day: 29, color: '#a78bfa' },
-    { name: 'Theo',      month: 6,  day: 26, color: '#34d399' },
-    { name: 'Willow',    month: 7,  day: 11, color: '#60a5fa' },
-    { name: 'Emma',      month: 8,  day: 5,  color: '#f472b6' },
-    { name: 'Ottilie',   month: 9,  day: 3,  color: '#fbbf24' },
+    { name: 'Freddie',   month: 4,  day: 24, color: '#ff6b9d', year: 1981 },
+    { name: 'Molly',     month: 4,  day: 29, color: '#a78bfa', year: 2017 },
+    { name: 'Theo',      month: 6,  day: 26, color: '#34d399', year: 2012 },
+    { name: 'Willow',    month: 7,  day: 11, color: '#60a5fa', year: 2022 },
+    { name: 'Emma',      month: 8,  day: 5,  color: '#f472b6', year: 1983 },
+    { name: 'Ottilie',   month: 9,  day: 3,  color: '#fbbf24', year: 2014 },
     { name: 'Christmas', month: 12, day: 25, color: '#ef4444', icon: 'star' },
   ];
 
@@ -303,6 +304,13 @@
     li.appendChild(sw);
     li.appendChild(name);
     li.appendChild(day);
+    if (ev.year) {
+      const age = document.createElement('span');
+      age.className = 'age';
+      // Age = completed orbits (simple year difference; fine for this visualisation)
+      age.textContent = today.getFullYear() - ev.year;
+      li.appendChild(age);
+    }
     legendList.appendChild(li);
   });
 
@@ -825,6 +833,78 @@
     }
   }
 
+  // Celebration bursts: when Earth sweeps past a birthday, fire a firework ring
+  let bursts = [];
+  let lastBurstDay = -1;
+  function maybeTriggerBurst(currentDay) {
+    const day = Math.floor(currentDay);
+    if (day === lastBurstDay) return;
+    lastBurstDay = day;
+    for (const ev of events) {
+      if (dayOfYear(ev.month, ev.day) === day) {
+        bursts.push({
+          day: day,
+          color: ev.color,
+          name: ev.name,
+          start: performance.now(),
+          duration: 2200,
+        });
+      }
+    }
+  }
+
+  function drawBursts(cx, cy, r, t) {
+    bursts = bursts.filter(b => t - b.start < b.duration);
+    for (const b of bursts) {
+      const u = (t - b.start) / b.duration; // 0..1
+      const a = angleForDay(b.day);
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      const maxR = 70 + 40 * Math.sin(u * Math.PI); // swell then fade
+      const alpha = 1 - u;
+      // Expanding ring
+      ctx.strokeStyle = b.color;
+      ctx.globalAlpha = alpha * 0.9;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, maxR * u, 0, Math.PI * 2);
+      ctx.stroke();
+      // Second, delayed ring
+      if (u > 0.25) {
+        const u2 = (u - 0.25) / 0.75;
+        ctx.globalAlpha = (1 - u2) * 0.5;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y, maxR * 0.6 * u2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Radiating sparks
+      const sparks = 14;
+      for (let i = 0; i < sparks; i++) {
+        const ang = (i / sparks) * Math.PI * 2 + u * 2;
+        const dist = maxR * u * (0.6 + 0.4 * Math.sin(i * 3.1));
+        const sx = x + Math.cos(ang) * dist;
+        const sy = y + Math.sin(ang) * dist;
+        ctx.globalAlpha = alpha * (0.5 + 0.5 * Math.sin(i));
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Name label fading in at the centre
+      ctx.globalAlpha = Math.min(1, u * 3) * (1 - u);
+      ctx.font = '700 15px Georgia, "Times New Roman", serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(b.name, x, y - 2);
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function frame(t) {
     const dt = Math.min(t - lastT, 100);
     lastT = t;
@@ -849,6 +929,8 @@
     drawMonthTicks(cx, cy, orbitR);
     drawMarkers(cx, cy, orbitR, yearFraction);
     drawEarth(cx, cy, orbitR, yearFraction, t);
+    maybeTriggerBurst(yearFraction * 365);
+    drawBursts(cx, cy, orbitR, t);
 
     updateLabels();
     requestAnimationFrame(frame);
