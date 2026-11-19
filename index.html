@@ -175,7 +175,7 @@
 </div>
 
 <div class="legend">
-  <h2>Birthdays</h2>
+  <h2>Birthdays &amp; Holidays</h2>
   <ul id="legendList"></ul>
 </div>
 
@@ -195,11 +195,29 @@
     { name: 'Freddie',   month: 4,  day: 24, color: '#ff6b9d', year: 1981 },
     { name: 'Molly',     month: 4,  day: 29, color: '#a78bfa', year: 2017 },
     { name: 'Theo',      month: 6,  day: 26, color: '#34d399', year: 2012 },
-    { name: 'Willow',    month: 7,  day: 11, color: '#60a5fa', year: 2022 },
+    { name: 'Willow',    month: 7,  day: 11, color: '#ff4fd8', year: 2022, wiggle: true },
     { name: 'Emma',      month: 8,  day: 5,  color: '#f472b6', year: 1983 },
     { name: 'Ottilie',   month: 9,  day: 3,  color: '#fbbf24', year: 2014 },
-    { name: 'Christmas', month: 12, day: 25, color: '#ef4444', icon: 'star' },
+    { name: 'Halloween', month: 10, day: 31, color: '#ff8c1a', icon: 'pumpkin', holiday: true },
+    { name: 'Christmas', month: 12, day: 25, color: '#ef4444', icon: 'star', holiday: true, dayWord: 'Day' },
   ];
+
+  // Easter Sunday moves every year (Anonymous Gregorian computus)
+  function easterDate(year) {
+    const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return { month, day };
+  }
+  const easter = easterDate(new Date().getFullYear());
+  events.push({ name: 'Easter', month: easter.month, day: easter.day, color: '#c4f06b', icon: 'egg', holiday: true, dayWord: 'Sunday' });
+  events.sort((p, q) => (p.month - q.month) || (p.day - q.day));
 
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const MONTH_LENGTHS = [31,28,31,30,31,30,31,31,30,31,30,31];
@@ -630,13 +648,110 @@
     ctx.closePath();
   }
 
-  function drawMarkers(cx, cy, r, currentFraction) {
+  // Willow's dot dances: a little figure-of-eight loop with a happy hop
+  function wiggleOffset(t) {
+    const s = t * 0.0025;
+    const hop = Math.abs(Math.sin(t * 0.006)) * 7;
+    return {
+      x: Math.sin(s) * 12,
+      y: Math.sin(s * 2) * 6 - hop,
+    };
+  }
+
+  function drawWiggleTrail(x, y, color, t) {
+    for (let i = 1; i <= 6; i++) {
+      const off = wiggleOffset(t - i * 45);
+      const cur = wiggleOffset(t);
+      const tx = x - cur.x + off.x;
+      const ty = y - cur.y + off.y;
+      ctx.globalAlpha = 0.35 * (1 - i / 7);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 5 - i * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // twinkling sparkles around her
+    for (let i = 0; i < 3; i++) {
+      const ph = t * 0.003 + i * 2.1;
+      const tw = 0.5 + 0.5 * Math.sin(ph * 2.3);
+      const sx = x + Math.cos(ph) * 14;
+      const sy = y + Math.sin(ph) * 14;
+      ctx.globalAlpha = tw * 0.9;
+      ctx.fillStyle = '#ffffff';
+      drawStar(sx, sy, 4, 3.2, 1);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPumpkin(x, y) {
+    ctx.fillStyle = '#ff8c1a';
+    for (const dx of [-3.5, 3.5, 0]) {
+      ctx.beginPath();
+      ctx.ellipse(x + dx, y + 1, dx === 0 ? 4 : 4.5, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(120,50,0,0.6)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 1, 4, 6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#3d8b37';
+    ctx.fillRect(x - 1, y - 7.5, 2, 3);
+    // jack-o'-lantern face
+    ctx.fillStyle = '#2a1200';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y - 1); ctx.lineTo(x - 2, y - 2.5); ctx.lineTo(x - 1.5, y); ctx.closePath();
+    ctx.moveTo(x + 4, y - 1); ctx.lineTo(x + 2, y - 2.5); ctx.lineTo(x + 1.5, y); ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y + 2.5);
+    ctx.quadraticCurveTo(x, y + 6.5, x + 4, y + 2.5);
+    ctx.quadraticCurveTo(x, y + 4.2, x - 4, y + 2.5);
+    ctx.fill();
+  }
+
+  function drawEgg(x, y) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(x, y, 5.5, 7.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#fdf6e3';
+    ctx.fill();
+    ctx.clip();
+    const stripes = ['#f9a8d4', '#a5f3fc', '#c4f06b', '#fde68a'];
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = stripes[i];
+      ctx.beginPath();
+      const sy = y - 5 + i * 3.4;
+      ctx.moveTo(x - 6, sy);
+      for (let k = 0; k <= 6; k++) ctx.lineTo(x - 6 + k * 2, sy + (k % 2 ? -1.2 : 1.2));
+      ctx.lineTo(x + 6, sy + 1.6);
+      for (let k = 6; k >= 0; k--) ctx.lineTo(x - 6 + k * 2, sy + 1.6 + (k % 2 ? -1.2 : 1.2));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 5.5, 7.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawMarkers(cx, cy, r, currentFraction, t) {
     const currentDay = currentFraction * 365;
     for (const ev of events) {
       const day = dayOfYear(ev.month, ev.day);
       const a = angleForDay(day);
-      const x = cx + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r;
+      let x = cx + Math.cos(a) * r;
+      let y = cy + Math.sin(a) * r;
+      if (ev.wiggle) {
+        const off = wiggleOffset(t);
+        x += off.x;
+        y += off.y;
+        drawWiggleTrail(x, y, ev.color, t);
+      }
       const dayDelta = Math.min(Math.abs(currentDay - day), 365 - Math.abs(currentDay - day));
       const proximity = Math.max(0, 1 - dayDelta / 12);
       const glowR = 14 + proximity * 16;
@@ -647,7 +762,11 @@
       ctx.beginPath();
       ctx.arc(x, y, glowR, 0, Math.PI * 2);
       ctx.fill();
-      if (ev.icon === 'star') {
+      if (ev.icon === 'pumpkin') {
+        drawPumpkin(x, y);
+      } else if (ev.icon === 'egg') {
+        drawEgg(x, y);
+      } else if (ev.icon === 'star') {
         ctx.fillStyle = ev.color;
         drawStar(x, y, 5, 8, 3.5);
         ctx.fill();
@@ -657,7 +776,7 @@
       } else {
         ctx.fillStyle = ev.color;
         ctx.beginPath();
-        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.arc(x, y, ev.wiggle ? 6 + Math.sin(t * 0.008) * 1.2 : 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,0.8)';
         ctx.lineWidth = 1;
@@ -770,11 +889,12 @@
       `<strong>${season.name}</strong> (Northern Hemisphere)`;
     const nb = nextBirthday(dayIdx);
     const label = document.getElementById('nextLabel');
+    const ev = nb.event;
     if (nb.days === 0) {
-      label.innerHTML = `Today: <strong>${nb.event.name}'s ${nb.event.name === 'Christmas' ? 'Day' : 'Birthday'}</strong>`;
+      const what = ev.holiday ? `${ev.name}${ev.dayWord ? ' ' + ev.dayWord : ''}` : `${ev.name}'s Birthday`;
+      label.innerHTML = `Today: <strong>${what}</strong>`;
     } else {
-      const isXmas = nb.event.name === 'Christmas';
-      label.innerHTML = `Next: <strong>${nb.event.name}${isXmas ? '' : "'s birthday"}</strong> in ${nb.days} day${nb.days === 1 ? '' : 's'}`;
+      label.innerHTML = `Next: <strong>${ev.name}${ev.holiday ? '' : "'s birthday"}</strong> in ${nb.days} day${nb.days === 1 ? '' : 's'}`;
     }
   }
 
@@ -872,7 +992,7 @@
       drawSeasons(cx, cy, orbitR, t);
       drawOrbit(cx, cy, orbitR);
       drawMonthTicks(cx, cy, orbitR);
-      drawMarkers(cx, cy, orbitR, yearFraction);
+      drawMarkers(cx, cy, orbitR, yearFraction, t);
       drawEarth(cx, cy, orbitR, yearFraction, t);
       maybeTriggerBurst(yearFraction * 365, t);
       drawBursts(cx, cy, orbitR, t);
